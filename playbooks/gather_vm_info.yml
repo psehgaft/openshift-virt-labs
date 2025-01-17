@@ -1,0 +1,34 @@
+---
+- name: ":::: Gather VM Information from VMware ::::"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    vcenter_hostname: "vcenter.example.com"
+    vcenter_username: "your-username"
+    vcenter_password: "your-password"
+
+  tasks:
+    - name: Connect to vCenter
+      community.vmware.vmware_vm_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: false
+      register: vm_info
+
+    - name: Save VM information to a file
+      copy:
+        dest: "/tmp/vm_info.json"
+        content: "{{ vm_info.virtual_machines | to_nice_json }}"
+        
+    - name: Extract and display key VM details
+      debug:
+        msg:
+          - "VM Name: {{ item.name }}"
+          - "vCPUs: {{ item.hardware.num_cpu }}"
+          - "RAM (GB): {{ item.hardware.memory_mb | int / 1024 }}"
+          - "Disk Size (GB): {{ item.disks[0].capacity_gb if item.disks|length > 0 else 'No Disk' }}"
+          - "IP Address: {{ item.guest.ip_address }}"
+          - "OS: {{ item.guest.guest_full_name }}"
+      loop: "{{ vm_info.virtual_machines }}"
+
