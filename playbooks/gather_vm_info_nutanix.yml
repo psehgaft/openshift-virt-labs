@@ -1,0 +1,36 @@
+---
+- name: ":::: Gather VM Information from Nutanix ::::"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    nutanix_host: "nutanix.example.com"
+    nutanix_username: "your-username"
+    nutanix_password: "your-password"
+    nutanix_port: 9440  # Puerto por defecto de la API REST de Nutanix
+
+  tasks:
+    - name: Connect to Nutanix and gather VM info
+      community.general.nutanix_vm_info:
+        hostname: "{{ nutanix_host }}"
+        username: "{{ nutanix_username }}"
+        password: "{{ nutanix_password }}"
+        port: "{{ nutanix_port }}"
+        validate_certs: false
+      register: nutanix_vm_info
+
+    - name: Save VM information to a file
+      copy:
+        dest: "/tmp/nutanix_vm_info.json"
+        content: "{{ nutanix_vm_info.vms | to_nice_json }}"
+
+    - name: Extract and display key VM details
+      debug:
+        msg:
+          - "VM Name: {{ item.name }}"
+          - "vCPUs: {{ item.num_vcpus }}"
+          - "RAM (GB): {{ item.memory_mb | int / 1024 }}"
+          - "Disk Size (GB): {{ item.disk_size_gb }}"
+          - "IP Address: {{ item.ip }}"
+          - "Power State: {{ item.power_state }}"
+      loop: "{{ nutanix_vm_info.vms }}"
+
