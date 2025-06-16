@@ -1,0 +1,15 @@
+apiVersion: kubevirt.io/v1
+kind: KubeVirt
+metadata:
+  name: kubevirt
+  namespace: kubevirt
+spec:
+  # Always pull the operator image if not present
+  imagePullPolicy: IfNotPresent
+  # Enable live-migration and eviction for rolling updates
+  workloadUpdateStrategy:
+    workloadUpdateMethods:
+      - LiveMigrate
+      - Evict
+    batchEvictionSize: 10
+    batchEvictionInterval: "1m"
