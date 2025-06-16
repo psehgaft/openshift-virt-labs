@@ -1,0 +1,186 @@
+# kubevirt-operator.yaml (v0.69.0)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubevirt
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubevirt-operator
+  namespace: kubevirt
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubevirt-operator
+  namespace: kubevirt
+rules:
+  - apiGroups:
+      - v1
+    resources:
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - operators.coreos.com
+    resources:
+      - clusterserviceversions
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubevirt-operator
+  namespace: kubevirt
+subjects:
+  - kind: ServiceAccount
+    name: kubevirt-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubevirt-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubevirt-operator
+rules:
+  - apiGroups:
+      - ""
+      - kubevirt.io
+      - kubevirt.io
+      - snapshot.storage.k8s.io
+    resources:
+      - pods
+      - virtualmachines
+      - virtualmachineinstances
+      - volumesnapshots
+    verbs:
+      - "*"
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    verbs:
+      - "*"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubevirt-operator
+subjects:
+  - kind: ServiceAccount
+    name: kubevirt-operator
+    namespace: kubevirt
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubevirt-operator
+---
+# CustomResourceDefinition for the KubeVirt CRD
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: kubevirts.kubevirt.io
+spec:
+  group: kubevirt.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          # (schema omitted for brevity)
+  scope: Namespaced
+  names:
+    plural: kubevirts
+    singular: kubevirt
+    kind: KubeVirt
+---
+# Deployment of the Virt Operator
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: virt-operator
+  namespace: kubevirt
+  labels:
+    kubevirt.io: ""
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: virt-operator
+  template:
+    metadata:
+      labels:
+        name: virt-operator
+    spec:
+      serviceAccountName: kubevirt-operator
+      containers:
+        - name: virt-operator
+          image: kubevirt/virt-operator:v0.69.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - virt-operator
+          args:
+            - --kubeconfig=/var/run/kubernetes/admin.kubeconfig
+          volumeMounts:
+            - mountPath: /var/run/kubernetes
+              name: kubeconfig
+      volumes:
+        - name: kubeconfig
+          hostPath:
+            path: /etc/kubernetes/admin.kubeconfig
+---
+# Webhook configurations for mutating and validating KubeVirt objects
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: virt-operator-mutator
+webhooks:
+  - name: mutator.kubevirt.io
+    clientConfig:
+      service:
+        namespace: kubevirt
+        name: virt-operator
+        path: /mutate
+    rules:
+      - apiGroups:
+          - kubevirt.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - virtualmachineinstances
+    failurePolicy: Fail
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: virt-operator-validator
+webhooks:
+  - name: validator.kubevirt.io
+    clientConfig:
+      service:
+        namespace: kubevirt
+        name: virt-operator
+        path: /validate
+    rules:
+      - apiGroups:
+          - kubevirt.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - virtualmachineinstances
+    failurePolicy: Fail
